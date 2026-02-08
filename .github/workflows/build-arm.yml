@@ -1,0 +1,56 @@
+name: Build opendbc for ARM
+
+on:
+  push:
+    branches:
+      - tick
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: [self-hosted, ARM64]  # Your Mac mini as a self-hosted runner
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install scons
+
+      - name: Build opendbc
+        run: |
+          scons -j4
+          # Adjust based on actual build output
+
+      - name: Prepare artifacts
+        run: |
+          mkdir -p build_artifacts
+          # Copy all .so, .pyd, .whl files to build_artifacts
+          find . -name "*.so" -o -name "*.pyd" -o -name "*.whl" | xargs -I {} cp {} build_artifacts/ 2>/dev/null || true
+
+      - name: Commit to prebuilt-arm branch
+        run: |
+          git config user.name "CI/CD"
+          git config user.email "ci@example.com"
+          git fetch origin prebuilt-arm || git checkout --orphan prebuilt-arm
+          git checkout prebuilt-arm || git switch -c prebuilt-arm
+          
+          # Copy build artifacts
+          cp -r build_artifacts/* . || true
+          
+          # Commit
+          git add .
+          git commit -m "ARM prebuilt binaries for tick branch" || echo "No changes to commit"
+          git push origin prebuilt-arm
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        if: always()
+        with:
+          tag_name: prebuilt-arm-${{ github.sha }}
+          release_name: ARM Prebuilt - ${{ github.sha }}
+          body: Prebuilt binaries for ARM architecture
